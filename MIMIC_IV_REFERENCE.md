@@ -1,8 +1,11 @@
 # MIMIC-IV v2.1 — Complete Reference
 
 Source: Beth Israel Deaconess Medical Center (BIDMC), Boston, MA  
-Covers: 2008–2019 (~300k patients, ~500k hospital admissions)  
+Covers: 2008–2019 (~300k patients, ~430k hospital admissions)  
 Official docs: https://mimic.mit.edu/docs/iv/
+
+> **Local path**: `/home/lepagnol/Projets/mimic_albanevial/mimic-iv-2.1/`  
+> Files are **plain uncompressed CSVs** (not .csv.gz).
 
 ---
 
@@ -11,9 +14,8 @@ Official docs: https://mimic.mit.edu/docs/iv/
 | Identifier   | Scope           | Description                                      |
 |--------------|-----------------|--------------------------------------------------|
 | `subject_id` | Patient          | Unique per patient, consistent across all tables |
-| `hadm_id`    | Hospital stay    | Unique per hospital admission (2000000–2999999)  |
+| `hadm_id`    | Hospital stay    | Unique per hospital admission                    |
 | `stay_id`    | ICU stay         | Unique per ICU stay (derived from transfers)     |
-| `stay_id`    | ED stay          | Same column name, separate namespace in ED module|
 
 > **Time shift**: All dates are shifted into the future for de-identification.  
 > Use `anchor_year` + `anchor_year_group` from `patients` to estimate the real year.
@@ -23,12 +25,13 @@ Official docs: https://mimic.mit.edu/docs/iv/
 ## Module overview
 
 ```
-MIMIC-IV v2.1
-├── hosp/        Hospital-wide EHR (22 tables)
-├── icu/         ICU clinical info system — MetaVision (9 tables)
-└── ed/          Emergency Department (6 tables)
+MIMIC-IV v2.1 (local download)
+├── hosp/        Hospital-wide EHR (21 tables)
+└── icu/         ICU clinical info system — MetaVision (8 tables)
 
-Separate datasets (same subject_id):
+⚠️ ed/ module (Emergency Department) NOT downloaded locally.
+
+Separate datasets (same subject_id, not downloaded):
 ├── MIMIC-CXR    Chest X-rays
 ├── MIMIC-IV-Note Clinical notes (discharge, radiology)
 └── MIMIC-IV-ECG ECG waveforms
@@ -62,8 +65,7 @@ All data from the hospital-wide EHR. Not just ICU patients — includes outpatie
 | `admittime`           | TIMESTAMP   | Admission datetime                                      |
 | `dischtime`           | TIMESTAMP   | Discharge datetime                                      |
 | `deathtime`           | TIMESTAMP   | In-hospital death time (NULL if survived)               |
-| `admission_type`      | VARCHAR(40) | 9 types: ELECTIVE, URGENT, EW EMER., DIRECT EMER., etc. |
-| `admit_provider_id`   | VARCHAR(10) | Anonymised admitting provider                           |
+| `admission_type`      | VARCHAR(40) | e.g. ELECTIVE, URGENT, EW EMER., DIRECT EMER.           |
 | `admission_location`  | VARCHAR(60) | Where patient came from (e.g. EMERGENCY ROOM)           |
 | `discharge_location`  | VARCHAR(60) | Where patient went (e.g. HOME, DIED, SNF)               |
 | `insurance`           | VARCHAR     | Insurance type                                          |
@@ -97,7 +99,6 @@ All data from the hospital-wide EHR. Not just ICU patients — includes outpatie
 | `hadm_id`          | INT         | May be NULL for outpatient labs                    |
 | `specimen_id`      | INT         | Groups measurements from the same physical sample  |
 | `itemid`           | INT         | Lab test type → join `d_labitems`                  |
-| `order_provider_id`| VARCHAR(10) |                                                    |
 | `charttime`        | TIMESTAMP   | When specimen was taken                            |
 | `storetime`        | TIMESTAMP   | When result became available                       |
 | `value`            | VARCHAR(200)| Raw result value (text)                            |
@@ -110,7 +111,7 @@ All data from the hospital-wide EHR. Not just ICU patients — includes outpatie
 | `comments`         | TEXT        | Free-text comments (de-identified as `___`)        |
 
 ### d_labitems
-> Dictionary for `labevents.itemid`. Small table — download fully.
+> Dictionary for `labevents.itemid`. Small table — load fully.
 
 | Column       | Type       | Description                        |
 |--------------|------------|------------------------------------|
@@ -118,7 +119,6 @@ All data from the hospital-wide EHR. Not just ICU patients — includes outpatie
 | `label`      | VARCHAR    | Test name (e.g. "Glucose")         |
 | `fluid`      | VARCHAR    | Specimen type (e.g. "Blood")       |
 | `category`   | VARCHAR    | Category (e.g. "Chemistry")        |
-| `loinc_code` | VARCHAR    | LOINC code                         |
 
 ### diagnoses_icd
 > Billed ICD-9/ICD-10 diagnoses per admission.
@@ -128,6 +128,18 @@ All data from the hospital-wide EHR. Not just ICU patients — includes outpatie
 | `subject_id` | INT        |                                          |
 | `hadm_id`    | INT        |                                          |
 | `seq_num`    | INT        | Priority of diagnosis (1 = primary)      |
+| `icd_code`   | VARCHAR    | ICD code                                 |
+| `icd_version`| SMALLINT   | 9 or 10                                  |
+
+### procedures_icd
+> Billed ICD-9/ICD-10 procedures per admission.
+
+| Column       | Type       | Description                              |
+|--------------|------------|------------------------------------------|
+| `subject_id` | INT        |                                          |
+| `hadm_id`    | INT        |                                          |
+| `seq_num`    | INT        | Priority of procedure                    |
+| `chartdate`  | DATE       | Date procedure was performed             |
 | `icd_code`   | VARCHAR    | ICD code                                 |
 | `icd_version`| SMALLINT   | 9 or 10                                  |
 
@@ -151,12 +163,46 @@ All data from the hospital-wide EHR. Not just ICU patients — includes outpatie
 | `emar_seq`          | INT         | Order of administration                       |
 | `poe_id`            | VARCHAR     | Links to `poe` (provider order)               |
 | `pharmacy_id`       | INT         | Links to `pharmacy`                           |
-| `enter_provider_id` | VARCHAR     |                                               |
 | `charttime`         | TIMESTAMP   | Time drug was administered                    |
 | `medication`        | TEXT        | Drug name                                     |
-| `event_txt`         | VARCHAR     | e.g. "Administered", "Not Given"              |
+| `event_txt`         | VARCHAR     | e.g. "Administered", "Not Given", "Flushed"   |
 | `scheduletime`      | TIMESTAMP   | Scheduled administration time                 |
 | `storetime`         | TIMESTAMP   |                                               |
+
+### emar_detail
+> Line-level detail for each emar event (dose amounts, infusion rates, barcode info).
+
+| Column                            | Description                                     |
+|-----------------------------------|-------------------------------------------------|
+| `subject_id`                      |                                                 |
+| `emar_id`                         | Links to `emar`                                 |
+| `emar_seq`                        |                                                 |
+| `parent_field_ordinal`            |                                                 |
+| `administration_type`             |                                                 |
+| `pharmacy_id`                     |                                                 |
+| `barcode_type`                    |                                                 |
+| `reason_for_no_barcode`           |                                                 |
+| `complete_dose_not_given`         |                                                 |
+| `dose_due` / `dose_due_unit`      | Expected dose                                   |
+| `dose_given` / `dose_given_unit`  | Actual dose administered                        |
+| `will_remainder_of_dose_be_given` |                                                 |
+| `product_amount_given`            |                                                 |
+| `product_unit`                    |                                                 |
+| `product_code`                    |                                                 |
+| `product_description`             |                                                 |
+| `product_description_other`       |                                                 |
+| `prior_infusion_rate`             |                                                 |
+| `infusion_rate` / `infusion_rate_unit` |                                            |
+| `infusion_rate_adjustment`        |                                                 |
+| `infusion_rate_adjustment_amount` |                                                 |
+| `route`                           | Administration route                            |
+| `infusion_complete`               |                                                 |
+| `completion_interval`             |                                                 |
+| `new_iv_bag_hung`                 |                                                 |
+| `continued_infusion_in_other_location` |                                            |
+| `restart_interval`                |                                                 |
+| `side` / `site`                   | Anatomical side/site                            |
+| `non_formulary_visual_verification` |                                              |
 
 ### prescriptions
 > Prescribed medications (order-level, less granular than emar).
@@ -168,7 +214,6 @@ All data from the hospital-wide EHR. Not just ICU patients — includes outpatie
 | `pharmacy_id`       | Links to `pharmacy` and `emar`                 |
 | `poe_id`            | Links to provider order in `poe`               |
 | `poe_seq`           | Sequence number within the order               |
-| `order_provider_id` | Anonymised provider who initiated the order    |
 | `starttime`         | Prescribed start time                          |
 | `stoptime`          | Prescribed stop time                           |
 | `drug_type`         | MAIN, BASE, or ADDITIVE                        |
@@ -185,7 +230,68 @@ All data from the hospital-wide EHR. Not just ICU patients — includes outpatie
 | `doses_per_24_hrs`  | Frequency (1=daily, 2=BID, etc.)               |
 | `route`             | Administration route (IV, PO, etc.)            |
 
-### microbiologyevents
+### pharmacy
+> Pharmacy-level medication orders. More detail than `prescriptions`, links to `emar`.
+
+| Column              | Description                                      |
+|---------------------|--------------------------------------------------|
+| `subject_id`        |                                                  |
+| `hadm_id`           |                                                  |
+| `pharmacy_id`       | PK — links to `prescriptions` and `emar`         |
+| `poe_id`            | Links to `poe`                                   |
+| `starttime`         |                                                  |
+| `stoptime`          |                                                  |
+| `medication`        | Drug name                                        |
+| `proc_type`         | e.g. "Unit Dose"                                 |
+| `status`            | e.g. "Discontinued via patient discharge"        |
+| `entertime`         | When order was entered                           |
+| `verifiedtime`      | When order was verified by pharmacist            |
+| `route`             |                                                  |
+| `frequency`         | e.g. "Q6H:PRN", "Q8H"                           |
+| `disp_sched`        | Dispensing schedule (hours)                      |
+| `infusion_type`     |                                                  |
+| `sliding_scale`     |                                                  |
+| `lockout_interval`  |                                                  |
+| `basal_rate`        |                                                  |
+| `one_hr_max`        |                                                  |
+| `doses_per_24_hrs`  |                                                  |
+| `duration`          | Numeric duration                                 |
+| `duration_interval` | Unit (e.g. "Hours")                              |
+| `expiration_value`  |                                                  |
+| `expiration_unit`   |                                                  |
+| `expirationdate`    |                                                  |
+| `dispensation`      | e.g. "Omnicell", "Floor Stock Item"              |
+| `fill_quantity`     |                                                  |
+
+### poe  (Provider Order Entry)
+> All physician orders (~39M rows). Links prescriptions/procedures back to the original order.
+
+| Column                  | Description                                  |
+|-------------------------|----------------------------------------------|
+| `poe_id`                | PK                                           |
+| `poe_seq`               | Sequence number within patient               |
+| `subject_id`            |                                              |
+| `hadm_id`               |                                              |
+| `ordertime`             | When order was placed                        |
+| `order_type`            | e.g. "Lab", "Respiratory", "Medications"     |
+| `order_subtype`         | e.g. "Oxygen Therapy"                        |
+| `transaction_type`      | e.g. "New"                                   |
+| `discontinue_of_poe_id` | Which order this discontinues                |
+| `discontinued_by_poe_id`| Which later order discontinued this          |
+| `order_status`          | e.g. "Inactive", "Active"                    |
+
+### poe_detail
+> Free-text field/value pairs for each order in `poe`.
+
+| Column       | Description                         |
+|--------------|-------------------------------------|
+| `poe_id`     | Links to `poe`                      |
+| `poe_seq`    |                                     |
+| `subject_id` |                                     |
+| `field_name` | Parameter name                      |
+| `field_value`| Parameter value (free text)         |
+
+### microbiologyevents  (~3.2M rows)
 > Microbiology cultures (blood, urine, CSF…) and sensitivities.
 
 | Column                  | Description                                                  |
@@ -194,10 +300,9 @@ All data from the hospital-wide EHR. Not just ICU patients — includes outpatie
 | `subject_id`            |                                                              |
 | `hadm_id`               | May be NULL (assigned via transfers table)                   |
 | `micro_specimen_id`     | Groups measurements from the same physical specimen          |
-| `order_provider_id`     | Anonymised provider who ordered the test                     |
 | `chartdate`             | Date of specimen collection (always present)                 |
 | `charttime`             | Datetime of specimen collection (NULL when time unknown)     |
-| `spec_itemid`           | Specimen type code (internal, not `d_labitems`)              |
+| `spec_itemid`           | Specimen type code (internal)                                |
 | `spec_type_desc`        | e.g. "BLOOD CULTURE"                                         |
 | `test_seq`              | Delineates multiple samples (e.g. aerobic vs anaerobic)      |
 | `storedate`             | Date result became available                                 |
@@ -213,22 +318,57 @@ All data from the hospital-wide EHR. Not just ICU patients — includes outpatie
 | `dilution_text`         | Raw MIC text, e.g. "<=0.12"                                  |
 | `dilution_comparison`   | Comparison operator, e.g. "<="                               |
 | `dilution_value`        | Numeric MIC value                                            |
-| `interpretation`        | S (Sensitive), R (Resistant), I (Intermediate), P (Pending) |
+| `interpretation`        | S (Sensitive), R (Resistant), I (Intermediate), P (Pending)  |
 | `comments`              | Free-text comments (de-identified as `___`)                  |
 
 ### services
 > Hospital service(s) caring for the patient (e.g. Medicine, Surgery).
 
-| Column        | Description                    |
-|---------------|--------------------------------|
-| `subject_id`  |                                |
-| `hadm_id`     |                                |
+| Column        | Description                         |
+|---------------|-------------------------------------|
+| `subject_id`  |                                     |
+| `hadm_id`     |                                     |
 | `transfertime`| When patient transferred to service |
-| `prev_service`| Previous service               |
-| `curr_service`| Current service                |
+| `prev_service`| Previous service                    |
+| `curr_service`| Current service                     |
+
+### drgcodes
+> Diagnosis-Related Group (DRG) codes billed per admission.
+
+| Column         | Description                                    |
+|----------------|------------------------------------------------|
+| `subject_id`   |                                                |
+| `hadm_id`      |                                                |
+| `drg_type`     | `HCFA` or `APR`                                |
+| `drg_code`     | DRG code                                       |
+| `description`  | Human-readable description                     |
+| `drg_severity` | APR severity of illness (1–4, NULL for HCFA)   |
+| `drg_mortality`| APR mortality risk (1–4, NULL for HCFA)        |
+
+### hcpcsevents
+> HCPCS (Healthcare Common Procedure Coding System) events billed per admission.
+
+| Column            | Description                      |
+|-------------------|----------------------------------|
+| `subject_id`      |                                  |
+| `hadm_id`         |                                  |
+| `chartdate`       |                                  |
+| `hcpcs_cd`        | HCPCS code                       |
+| `seq_num`         | Sequence number                  |
+| `short_description`| Human-readable description      |
+
+### d_hcpcs
+> Dictionary for HCPCS codes.
+
+| Column             | Description              |
+|--------------------|--------------------------|
+| `code`             | HCPCS code               |
+| `category`         | Category                 |
+| `long_description` | Full description         |
+| `short_description`| Short description        |
 
 ### omr  (Online Medical Record)
-> Miscellaneous outpatient/clinic measurements (e.g. BMI, blood pressure).
+> Miscellaneous outpatient/clinic measurements (e.g. BMI, blood pressure). (~6.4M rows)
 
 | Column         | Description                             |
 |----------------|-----------------------------------------|
@@ -248,32 +388,32 @@ Star schema: `icustays` + `d_items` ← linked to all `*events` tables.
 ### icustays  (~73k rows)
 > One row per ICU stay. Derived from `transfers`.
 
-| Column           | Type    | Description                                    |
-|------------------|---------|------------------------------------------------|
-| `subject_id`     | INT     |                                                |
-| `hadm_id`        | INT     |                                                |
-| `stay_id`        | INT PK  | ICU stay identifier                            |
-| `first_careunit` | VARCHAR | First ICU type (e.g. `Medical Intensive Care Unit`)|
-| `last_careunit`  | VARCHAR | Last ICU type                                  |
-| `intime`         | TIMESTAMP | ICU admission time                           |
-| `outtime`        | TIMESTAMP | ICU discharge time                           |
-| `los`            | DOUBLE  | Length of stay in **fractional days**          |
+| Column           | Type      | Description                                    |
+|------------------|-----------|------------------------------------------------|
+| `subject_id`     | INT       |                                                |
+| `hadm_id`        | INT       |                                                |
+| `stay_id`        | INT PK    | ICU stay identifier                            |
+| `first_careunit` | VARCHAR   | First ICU type (e.g. `Medical Intensive Care Unit`)|
+| `last_careunit`  | VARCHAR   | Last ICU type                                  |
+| `intime`         | TIMESTAMP | ICU admission time                             |
+| `outtime`        | TIMESTAMP | ICU discharge time                             |
+| `los`            | DOUBLE    | Length of stay in **fractional days**          |
 
 ### d_items
 > Dictionary of all ICU concepts (itemid). Cross-reference for all events tables.
 
-| Column       | Description                                    |
-|--------------|------------------------------------------------|
-| `itemid`     | Unique concept identifier                      |
-| `label`      | Concept name (e.g. "Heart Rate")               |
-| `abbreviation` | Short name                                   |
-| `linksto`    | Which table it links to (e.g. `chartevents`)   |
-| `category`   | e.g. "Routine Vital Signs", "Labs"             |
-| `unitname`   | Unit (e.g. "bpm")                              |
-| `param_type` | Numeric, Text, Date/Time, etc.                 |
-| `lownormalvalue` / `highnormalvalue` | Normal range                |
+| Column                              | Description                                    |
+|-------------------------------------|------------------------------------------------|
+| `itemid`                            | Unique concept identifier                      |
+| `label`                             | Concept name (e.g. "Heart Rate")               |
+| `abbreviation`                      | Short name                                     |
+| `linksto`                           | Which table it links to (e.g. `chartevents`)   |
+| `category`                          | e.g. "Routine Vital Signs", "Labs"             |
+| `unitname`                          | Unit (e.g. "bpm")                              |
+| `param_type`                        | Numeric, Text, Date/Time, etc.                 |
+| `lownormalvalue` / `highnormalvalue`| Normal range                                   |
 
-### chartevents  ⚠️ HUGE (~313M rows)
+### chartevents  ⚠️ HUGE (~314M rows)
 > The majority of all ICU data: vitals, ventilator settings, neuro assessments, labs.
 
 | Column        | Type        | Description                                     |
@@ -281,7 +421,6 @@ Star schema: `icustays` + `d_items` ← linked to all `*events` tables.
 | `subject_id`  | INT         |                                                 |
 | `hadm_id`     | INT         |                                                 |
 | `stay_id`     | INT         |                                                 |
-| `caregiver_id`| INT         | Who documented the observation                  |
 | `charttime`   | TIMESTAMP   | Time of observation                             |
 | `storetime`   | TIMESTAMP   | Time manually entered/validated                 |
 | `itemid`      | INT         | → `d_items`                                     |
@@ -300,7 +439,6 @@ Star schema: `icustays` + `d_items` ← linked to all `*events` tables.
 | `subject_id`                    |                                                           |
 | `hadm_id`                       |                                                           |
 | `stay_id`                       |                                                           |
-| `caregiver_id`                  | Who documented the event                                  |
 | `starttime`                     | Infusion start                                            |
 | `endtime`                       | Infusion end (bolus = starttime + 1 min)                  |
 | `storetime`                     | When manually entered/validated                           |
@@ -332,7 +470,6 @@ Star schema: `icustays` + `d_items` ← linked to all `*events` tables.
 | `subject_id`  |                                |
 | `hadm_id`     |                                |
 | `stay_id`     |                                |
-| `caregiver_id`| Who documented the event       |
 | `charttime`   | Time of output measurement     |
 | `storetime`   | When manually entered/validated|
 | `itemid`      | → `d_items`                    |
@@ -342,141 +479,66 @@ Star schema: `icustays` + `d_items` ← linked to all `*events` tables.
 ### procedureevents  (~696k rows)
 > Documented procedures (ventilation, dialysis, etc.). Absence ≠ procedure not done.
 
-| Column                   | Description                                          |
-|--------------------------|------------------------------------------------------|
-| `subject_id`             |                                                      |
-| `hadm_id`                |                                                      |
-| `stay_id`                |                                                      |
-| `caregiver_id`           | Who documented the event                             |
-| `starttime`              |                                                      |
-| `endtime`                |                                                      |
-| `storetime`              | When manually entered                                |
-| `itemid`                 | → `d_items` (e.g. 225792 = Invasive Ventilation)     |
-| `value`                  | Duration of procedure (e.g. 461 minutes)             |
-| `valueuom`               | "min", "hour", "day", or "None" (instantaneous)      |
-| `location`               | Anatomical location (e.g. "Left Upper Arm")          |
-| `locationcategory`       | Location category (e.g. "Invasive Venous")           |
-| `orderid`                | Links to physician order                             |
-| `linkorderid`            | Links repeated procedures under same original order  |
-| `ordercategoryname`      | Type of procedure                                    |
-| `ordercategorydescription`|                                                     |
-| `patientweight`          | Patient weight in kg                                 |
-| `isopenbag`              |                                                      |
-| `continueinnextdept`     | 1 = continued after transfer                         |
-| `statusdescription`      | "FinishedRunning", "Stopped", "Paused"               |
-| `originalamount`         | Present but no clear meaning                         |
-| `originalrate`           | Present but no clear meaning (always 0 or 1)         |
+| Column                    | Description                                          |
+|---------------------------|------------------------------------------------------|
+| `subject_id`              |                                                      |
+| `hadm_id`                 |                                                      |
+| `stay_id`                 |                                                      |
+| `starttime`               |                                                      |
+| `endtime`                 |                                                      |
+| `storetime`               | When manually entered                                |
+| `itemid`                  | → `d_items` (e.g. 225792 = Invasive Ventilation)     |
+| `value`                   | Duration of procedure (e.g. 461 minutes)             |
+| `valueuom`                | "min", "hour", "day", or "None" (instantaneous)      |
+| `location`                | Anatomical location (e.g. "Left Upper Arm")          |
+| `locationcategory`        | Location category (e.g. "Invasive Venous")           |
+| `orderid`                 | Links to physician order                             |
+| `linkorderid`             | Links repeated procedures under same original order  |
+| `ordercategoryname`       | Type of procedure                                    |
+| `ordercategorydescription`|                                                      |
+| `patientweight`           | Patient weight in kg                                 |
+| `isopenbag`               |                                                      |
+| `continueinnextdept`      | 1 = continued after transfer                         |
+| `statusdescription`       | "FinishedRunning", "Stopped", "Paused"               |
+| `originalamount`          |                                                      |
+| `originalrate`            |                                                      |
 
-### datetimeevents
+### datetimeevents  (~7.1M rows)
 > Charted items that are a **date/time** (e.g. "Date of last dialysis").
 
-Same structure as `chartevents` but `value` holds a datetime string.
+| Column        | Description                                     |
+|---------------|-------------------------------------------------|
+| `subject_id`  |                                                 |
+| `hadm_id`     |                                                 |
+| `stay_id`     |                                                 |
+| `charttime`   | Time of observation                             |
+| `storetime`   |                                                 |
+| `itemid`      | → `d_items`                                     |
+| `value`       | Datetime string                                 |
+| `valueuom`    |                                                 |
+| `warning`     |                                                 |
 
-### ingredientevents
+### ingredientevents  (~11.6M rows)
 > Nutritional/water content of IV infusions (links to `inputevents`).
 
-| Column      | Description                     |
-|-------------|---------------------------------|
-| `stay_id`   |                                 |
-| `itemid`    | → `d_items` (ingredient type)   |
-| `starttime` |                                 |
-| `endtime`   |                                 |
-| `amount`    | Amount of ingredient            |
-| `amountuom` | Unit                            |
-| `patientweight` |                             |
-
----
-
-## MODULE: ed  (Emergency Department)
-
-Separate from hosp/icu. Linked via `subject_id` and `hadm_id`.
-
-### edstays
-> One row per ED visit. The ED equivalent of `icustays`.
-
-| Column          | Description                                    |
-|-----------------|------------------------------------------------|
-| `subject_id`    |                                                |
-| `hadm_id`       | NULL if patient discharged without admission   |
-| `stay_id`       | ED stay identifier (different namespace from ICU)|
-| `intime`        | ED arrival                                     |
-| `outtime`       | ED departure                                   |
-| `gender`        |                                                |
-| `race`          |                                                |
-| `arrival_transport` | e.g. "WALK IN", "AMBULANCE"               |
-| `disposition`   | e.g. "ADMITTED", "HOME", "TRANSFER"            |
-
-### triage
-> Triage assessment at ED arrival (one row per ED stay).
-
-| Column           | Description                          |
-|------------------|--------------------------------------|
-| `subject_id`     |                                      |
-| `stay_id`        |                                      |
-| `temperature`    | °F                                   |
-| `heartrate`      | bpm                                  |
-| `resprate`       | breaths/min                          |
-| `o2sat`          | SpO₂ %                               |
-| `sbp` / `dbp`    | Systolic / diastolic BP mmHg         |
-| `pain`           | Pain score 0–10                      |
-| `acuity`         | ESI triage level 1–5 (1=most urgent) |
-| `chiefcomplaint` | Free-text chief complaint            |
-
-### vitalsign
-> Vital signs throughout the ED stay (multiple rows per stay).
-
-| Column       | Description                   |
-|--------------|-------------------------------|
-| `subject_id` |                               |
-| `stay_id`    |                               |
-| `charttime`  |                               |
-| `temperature`|                               |
-| `heartrate`  |                               |
-| `resprate`   |                               |
-| `o2sat`      |                               |
-| `sbp` / `dbp`|                               |
-| `rhythm`     | Cardiac rhythm                |
-| `pain`       | Pain score                    |
-
-### diagnosis
-> ICD diagnoses assigned in the ED.
-
-| Column       | Description                         |
-|--------------|-------------------------------------|
-| `subject_id` |                                     |
-| `stay_id`    |                                     |
-| `seq_num`    | Diagnosis priority                  |
-| `icd_code`   |                                     |
-| `icd_version`| 9 or 10                             |
-| `icd_title`  | Description (included inline here)  |
-
-### medrecon
-> Medication reconciliation at ED admission.
-
-| Column         | Description                       |
-|----------------|-----------------------------------|
-| `subject_id`   |                                   |
-| `stay_id`      |                                   |
-| `charttime`    |                                   |
-| `name`         | Medication name                   |
-| `gsn`          | Generic Sequence Number           |
-| `ndc`          | National Drug Code                |
-| `etc_rn`       | ETC drug category                 |
-| `etccode`      | ETC code                          |
-| `etcdescription` | ETC category description        |
-
-### pyxis
-> Medications dispensed from automated dispensing cabinets in the ED.
-
-| Column       | Description                         |
-|--------------|-------------------------------------|
-| `subject_id` |                                     |
-| `stay_id`    |                                     |
-| `charttime`  |                                     |
-| `med_rn`     | Row number within stay              |
-| `name`       | Medication name                     |
-| `gsn_rn`     | GSN row number                      |
-| `gsn`        | Generic Sequence Number             |
+| Column              | Description                                     |
+|---------------------|-------------------------------------------------|
+| `subject_id`        |                                                 |
+| `hadm_id`           |                                                 |
+| `stay_id`           |                                                 |
+| `starttime`         |                                                 |
+| `endtime`           |                                                 |
+| `storetime`         |                                                 |
+| `itemid`            | → `d_items` (ingredient type)                   |
+| `amount`            | Amount of ingredient                            |
+| `amountuom`         | Unit                                            |
+| `rate`              | Infusion rate                                   |
+| `rateuom`           | Rate unit                                       |
+| `orderid`           | Links to `inputevents`                          |
+| `linkorderid`       |                                                 |
+| `statusdescription` | e.g. "FinishedRunning", "Stopped"               |
+| `originalamount`    |                                                 |
+| `originalrate`      |                                                 |
 
 ---
 
@@ -511,35 +573,54 @@ WHERE a.hospital_expire_flag = 1;
 
 ---
 
-## File sizes at a glance (approximate)
+## File sizes at a glance (uncompressed CSVs)
 
-| File                       | Size   | Rows          |
-|----------------------------|--------|---------------|
-| icu/chartevents.csv.gz     | ~2 GB  | 313 M         |
-| hosp/labevents.csv.gz      | ~1.5 GB| 118 M         |
-| hosp/emar.csv.gz           | ~300 MB| —             |
-| hosp/emar_detail.csv.gz    | ~600 MB| —             |
-| hosp/prescriptions.csv.gz  | ~200 MB| —             |
-| icu/inputevents.csv.gz     | ~200 MB| —             |
-| hosp/microbiologyevents.csv| ~50 MB | —             |
-| icu/icustays.csv           | ~4 MB  | 73k           |
-| hosp/admissions.csv        | ~15 MB | ~500k         |
-| hosp/patients.csv          | ~5 MB  | ~300k         |
-| *d_* tables                | <5 MB  | thousands     |
+| File                         | Size   | Rows (approx) |
+|------------------------------|--------|---------------|
+| icu/chartevents.csv          | 27 GB  | 314 M         |
+| hosp/labevents.csv           | 13 GB  | 118 M         |
+| hosp/emar_detail.csv         | 5.1 GB | 54.5 M        |
+| hosp/emar.csv                | 3.6 GB | 26.7 M        |
+| hosp/poe.csv                 | 3.4 GB | 39.3 M        |
+| hosp/pharmacy.csv            | 2.9 GB | 13.6 M        |
+| hosp/prescriptions.csv       | 2.4 GB | 15.4 M        |
+| icu/inputevents.csv          | 2.2 GB | 9.0 M         |
+| icu/ingredientevents.csv     | 1.9 GB | 11.6 M        |
+| icu/datetimeevents.csv       | 703 MB | 7.1 M         |
+| hosp/microbiologyevents.csv  | 698 MB | 3.2 M         |
+| icu/outputevents.csv         | 325 MB | 4.2 M         |
+| hosp/omr.csv                 | 253 MB | 6.4 M         |
+| hosp/poe_detail.csv          | 178 MB | 3.0 M         |
+| hosp/transfers.csv           | 151 MB | 1.89 M        |
+| hosp/diagnoses_icd.csv       | 129 MB | 4.75 M        |
+| icu/procedureevents.csv      | 121 MB | 696 k         |
+| hosp/procedures_icd.csv      | 26 MB  | 668 k         |
+| hosp/drgcodes.csv            | 41 MB  | 604 k         |
+| hosp/services.csv            | 20 MB  | 468 k         |
+| hosp/admissions.csv          | 67 MB  | 431 k         |
+| hosp/hcpcsevents.csv         | 9.3 MB | 151 k         |
+| icu/icustays.csv             | 11 MB  | 73 k          |
+| hosp/patients.csv            | 9.5 MB | 300 k         |
+| hosp/d_icd_diagnoses.csv     | 8.5 MB | 110 k         |
+| hosp/d_icd_procedures.csv    | 7.1 MB | 85 k          |
+| hosp/d_hcpcs.csv             | 3.2 MB | 89 k          |
+| icu/d_items.csv              | 360 KB | 4 k           |
+| hosp/d_labitems.csv          | 64 KB  | 1.6 k         |
 
 > **Start small**: `patients`, `admissions`, `icustays`, `d_items`, `d_labitems` are all tiny.  
 > **Big files**: `chartevents` and `labevents` — use column selection and time filtering.
 
 ---
 
-## Scale of the dataset
+## Scale of the dataset (local)
 
-- **~300,000** unique patients  
-- **~500,000** hospital admissions  
-- **~73,000** ICU stays  
-- **~425,000** ED stays  
-- **313 million** charted ICU observations  
-- **118 million** lab measurements  
+- **~299,777** unique patients
+- **~431,088** hospital admissions
+- **~73,141** ICU stays
+- **314 million** charted ICU observations
+- **118 million** lab measurements
+- **15.4 million** prescription orders
+- **26.7 million** medication administration records (emar)
 
 ---
 
@@ -548,4 +629,3 @@ WHERE a.hospital_expire_flag = 1;
 - Docs: https://mimic.mit.edu/docs/iv/
 - Code & derived tables: https://github.com/MIT-LCP/mimic-code
 - BigQuery sandbox: https://mimic.mit.edu/docs/gettingstarted/cloud/bigquery/
-- Kaggle dataset: https://www.kaggle.com/datasets/mangeshwagle/mimic-iv-2-1
