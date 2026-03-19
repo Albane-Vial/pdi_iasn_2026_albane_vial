@@ -1,13 +1,4 @@
-import random
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-import torch
-from torch.utils.data import Dataset, DataLoader
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
-from torch.optim import AdamW
-from sklearn.model_selection import train_test_split
-
 
 DATA_PATH = '/kaggle/input/datasets/mangeshwagle/mimic-iv-2-1/mimic-iv-2.1/hosp/'
 
@@ -112,7 +103,7 @@ def generer_phrase(row):
             f"[ROUTE] {row['route']} "
             f"[GEN] {row['gender']} [ADM] {row['admission_type']} "
             f"[DX] {row['nom_diag']} "
-            f"[BIO] {row['nom_bio']}")
+            f"[BIO] {row['label_with_flag']}")
 
 def executer_pipeline_nettoyage():
     print("Démarrage du nettoyage...")

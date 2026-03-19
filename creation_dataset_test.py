@@ -153,6 +153,14 @@ def generate_test_dataset_multiple(df_input, number_prescription, number_perturb
     
     return df_drug
 
+def generer_phrase(row):
+    dose = row['dose_val_rx'] if pd.notnull(row['dose_val_rx']) else "N/A"
+    
+    return (f"[DRUG] {row['drug']} [DOSE] {dose} [UNIT] {row['dose_unit_rx']} "
+            f"[ROUTE] {row['route']} "
+            f"[GEN] {row['gender']} [ADM] {row['admission_type']} "
+            #f"[DX] {row['nom_diag']} "
+            f"[BIO] {row['nom_bio']}")
 
 def generer_datasets_test(df_final, number_prescription, error_types_to_generate, number_perturb):
     stats = df_final.groupby('drug')['dose_val_rx'].agg(['mean', 'std'])
@@ -161,6 +169,9 @@ def generer_datasets_test(df_final, number_prescription, error_types_to_generate
     map_upper = (stats['mean'] + 2 * stats['std']).to_dict()
     
     df_validation_test = generate_test_dataset_simple(df_final, number_prescription, map_lower, map_upper)
+    df_validation_test['phrase_clinique'] = df_validation_test.apply(generer_phrase, axis=1)
+
     df_validation_test_mult = generate_test_dataset_multiple(df_final, number_prescription, number_perturb, map_lower, map_upper)
-    
+    df_validation_test_mult['phrase_clinique'] = df_validation_test_mult.apply(generer_phrase, axis=1)
+
     return df_validation_test, df_validation_test_mult

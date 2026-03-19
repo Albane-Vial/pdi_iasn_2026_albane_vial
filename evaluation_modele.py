@@ -9,9 +9,6 @@ from sklearn.metrics import (
 )
 
 def evaluer_detection_binaire(df, col_vrai='label_vrai', col_pred='label_pred'):
-    """
-    Évalue la capacité du modèle à détecter la présence (1) ou l'absence (0) d'une erreur.
-    """
     y_true = df[col_vrai].astype(int)
     y_pred = df[col_pred].astype(int)
     
@@ -25,9 +22,6 @@ def evaluer_detection_binaire(df, col_vrai='label_vrai', col_pred='label_pred'):
     return resultats_binaires
 
 def preparer_labels_multilabel(df, col_vraies_valeurs, col_predictions):
-    """
-    Transforme les chaînes de caractères d'erreurs en matrices binaires.
-    """
     y_true_list = df[col_vraies_valeurs].apply(
         lambda x: str(x).split('|') if pd.notna(x) and x != "none" else []
     ).tolist()
@@ -45,9 +39,6 @@ def preparer_labels_multilabel(df, col_vraies_valeurs, col_predictions):
     return y_true_bin, y_pred_bin, mlb.classes_
 
 def evaluer_caracterisation_multilabel(df, col_vrai='error_types', col_pred='error_types_pred'):
-    """
-    Évalue la précision du typage des erreurs sur l'ensemble du dataset.
-    """
     y_true_bin, y_pred_bin, classes = preparer_labels_multilabel(df, col_vrai, col_pred)
 
     if len(classes) == 0:
@@ -56,24 +47,19 @@ def evaluer_caracterisation_multilabel(df, col_vrai='error_types', col_pred='err
     rapport_detaille = classification_report(y_true_bin, y_pred_bin, target_names=classes, zero_division=0)
     
     resultats_multi = {
-        'F1_Macro': f1_score(y_true_bin, y_pred_bin, average='macro', zero_division=0),
-        'F1_Micro': f1_score(y_true_bin, y_pred_bin, average='micro', zero_division=0),
+        #'F1_Macro': f1_score(y_true_bin, y_pred_bin, average='macro', zero_division=0),
+        #'F1_Micro': f1_score(y_true_bin, y_pred_bin, average='micro', zero_division=0),
         'Rapport_Detaille': rapport_detaille
     }
     return resultats_multi
 
 def evaluer_pipeline_complet(df):
-    """
-    Orchestre l'évaluation binaire puis multi-label et retourne un dictionnaire global.
-    """
     rapport_global = {}
-    
-    # 1. Évaluation de la détection (0 ou 1)
+
     rapport_global['Detection_Binaire'] = evaluer_detection_binaire(
         df, col_vrai='label_vrai', col_pred='label_pred'
     )
     
-    # 2. Évaluation de la caractérisation (types d'erreurs)
     rapport_global['Caracterisation_Multilabel'] = evaluer_caracterisation_multilabel(
         df, col_vrai='error_types', col_pred='error_types_pred'
     )

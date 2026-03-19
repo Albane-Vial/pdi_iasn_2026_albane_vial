@@ -3,14 +3,14 @@ import gc
 import torch
 import itertools
 import numpy as np
-from datasets import Dataset
 from transformers import (
     AutoTokenizer, DebertaV2Config, DebertaV2ForMaskedLM, 
     DebertaV2ForTokenClassification, Trainer, TrainingArguments, 
     DataCollatorForLanguageModeling
 )
 import pandas as pd
-from torch.utils.data import DataLoader, Dataset 
+from datasets import Dataset
+from torch.utils.data import DataLoader, Dataset as TorchDataset 
 
 def configurer_environnement():
     """Purge la VRAM et configure le périphérique cible."""
@@ -23,6 +23,7 @@ def configurer_environnement():
 
 def initialiser_tokenizer(model_checkpoint, special_tokens):
     """Charge le tokenizer et ajoute les tokens spéciaux."""
+    
     tokenizer = AutoTokenizer.from_pretrained(model_checkpoint, use_fast=False)
     tokenizer.add_special_tokens({"additional_special_tokens": special_tokens})
     return tokenizer
@@ -108,23 +109,21 @@ class DebertaV3RTDTrainer(Trainer):
         total_loss = gen_outputs.loss + 50.0 * disc_outputs.loss
         return (total_loss, disc_outputs) if return_outputs else total_loss
 
-def lancer_entrainement(tokenizer, dataset, generator, discriminator, vocab_size, output_dir="/kaggle/working/"):
+def lancer_entrainement(tokenizer, dataset, generator, discriminator, vocab_size, output_dir="/teamspace/studios/this_studio/"):
     """Configure les hyperparamètres, instancie le Trainer et exécute l'entraînement."""
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=True, mlm_probability=0.15)
-
     training_args = TrainingArguments(
         output_dir=os.path.join(output_dir, "deberta_rtd_medical_checkpoints"),
-        per_device_train_batch_size=2,
-        gradient_accumulation_steps=16,
-        fp16=False,
-        num_train_epochs=5,
+        per_device_train_batch_size=8,          # Modification : passage de 2 à 8
+        gradient_accumulation_steps=4,          # Modification : passage de 16 à 4
+        fp16=True,                              # Modification : activation de la précision 16 bits
+        num_train_epochs=2,                     # Modification : passage de 5 à 2 époques
         learning_rate=5e-5,
         remove_unused_columns=False,
         save_strategy="epoch",
         save_total_limit=1,
         report_to="none"
     )
-
     trainer = DebertaV3RTDTrainer(
         generator=generator,     # Passage explicite
         vocab_size=vocab_size,   # Passage explicite
@@ -146,7 +145,7 @@ def lancer_entrainement(tokenizer, dataset, generator, discriminator, vocab_size
 
 
 
-class DatasetInference(Dataset):
+class DatasetInference(TorchDataset):
     """Classe utilitaire PyTorch pour gérer les tenseurs par lots (batches)."""
     def __init__(self, encodings):
         self.encodings = encodings
@@ -163,54 +162,78 @@ def preparer_donnees_test(df_test, colonnes_a_masquer=['error_types', 'nb_errors
     df_sans_labels = df_test.drop(columns=colonnes_a_masquer)
     return df_sans_labels, df_labels_caches
 
-def executer_predictions(df_entree, config, batch_size=16):
-    """Charge le modèle et exécute la prédiction sur CPU ou GPU."""
+def executer_predictions_contextuelles(df_entree, config, batch_size=16):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     
-    # 1. Chargement depuis le chemin sauvegardé
-    tokenizer = AutoTokenizer.from_pretrained(config["chemin_modele"])
-    modele = DebertaV2ForTokenClassification.from_pretrained(config["chemin_modele"])
+    chemin_local = config["chemin_modele"]
+    tokenizer = AutoTokenizer.from_pretrained(chemin_local)
+    modele = DebertaV2ForTokenClassification.from_pretrained(chemin_local)
     modele.to(device)
-    modele.eval() # Désactive le Dropout et BatchNorm
-
-    # 2. Tokenisation
-    encodings = tokenizer(
-        df_entree['phrase_clinique'].tolist(),
-        truncation=True,
-        padding="max_length",
-        max_length=config["max_length"],
-        return_tensors="pt"
-    )
+    modele.eval()
     
-    dataloader = DataLoader(DatasetInference(encodings), batch_size=batch_size)
+    # Utilisation robuste du Dataset HuggingFace
+    dataset_hf = Dataset.from_pandas(df_entree[['phrase_clinique']])
+    
+    def tokenize_func(examples):
+        return tokenizer(examples['phrase_clinique'], truncation=True, padding="max_length", max_length=config["max_length"])
+    
+    tokenized_dataset = dataset_hf.map(tokenize_func, batched=True)
+    tokenized_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask'])
+    
+    dataloader = DataLoader(tokenized_dataset, batch_size=batch_size)
+    
     predictions_binaires = []
+    predictions_labels = []
     
-    # 3. Boucle de prédiction
+    # Mapping des balises vers le vocabulaire exact de votre évaluateur MultiLabelBinarizer
+    tag_to_label = {
+        "[DRUG]": "drug",
+        "[ROUTE]": "route",
+        "[UNIT]": "unit_dosage", 
+        "[DOSE]": "dosage" # Regroupe sous_dosage et sur_dosage
+    }
+    
     with torch.no_grad():
         for batch in dataloader:
             input_ids = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
             
             sorties = modele(input_ids=input_ids, attention_mask=attention_mask)
-            logits = sorties.logits
-            
-            # Argmax pour obtenir la classe prédite par token (0: original, 1: remplacé)
-            preds_tokens = torch.argmax(logits, dim=-1)
-            
-            # Masquage des tokens de padding pour ne pas fausser l'analyse
-            masque_actif = attention_mask == 1
+            preds_tokens = torch.argmax(sorties.logits, dim=-1)
             
             for i in range(preds_tokens.shape[0]):
-                # On extrait uniquement les prédictions des vrais tokens de la phrase
-                tokens_valides = preds_tokens[i][masque_actif[i]]
+                # Reconversion des identifiants en texte pour lire les balises
+                tokens = tokenizer.convert_ids_to_tokens(input_ids[i])
+                preds = preds_tokens[i].cpu().tolist()
+                mask = attention_mask[i].cpu().tolist()
                 
-                # Agrégation binaire : si au moins 1 token est classé comme "erreur" (1), la phrase est en erreur
-                if 1 in tokens_valides:
-                    predictions_binaires.append(1)
+                phrase_has_error = 0
+                detected_categories = set() # Set pour éviter les doublons si plusieurs tokens d'un même champ sont en erreur
+                current_context = "none"
+                
+                for token, pred, m in zip(tokens, preds, mask):
+                    if m == 0: 
+                        continue # On ignore les tokens de padding
+                    
+                    # 1. Mise à jour du contexte si on croise une balise
+                    if token in tag_to_label:
+                        current_context = tag_to_label[token]
+                        continue 
+                        
+                    # 2. Si le token courant est une erreur, on l'associe au contexte actif
+                    if pred == 1:
+                        phrase_has_error = 1
+                        if current_context != "none":
+                            detected_categories.add(current_context)
+                
+                predictions_binaires.append(phrase_has_error)
+                
+                if len(detected_categories) > 0:
+                    predictions_labels.append("|".join(list(detected_categories)))
                 else:
-                    predictions_binaires.append(0)
-
-    return predictions_binaires
+                    predictions_labels.append("none")
+                    
+    return predictions_binaires, predictions_labels
 
 
 
@@ -241,6 +264,37 @@ def executer_pipeline_entrainement(df_final):
 
 
 def executer_pipeline_inference(df_test, config):
+    colonnes_labels = ['error_types', 'nb_errors']
+    
+    df_sans_labels, df_labels_caches = preparer_donnees_test(df_test, colonnes_labels)
+    
+    # Récupération simultanée des probabilités binaires et du typage des erreurs
+    preds_binaires, preds_labels = executer_predictions_contextuelles(df_sans_labels, config)
+    
+    df_resultat = df_test.copy() 
+    df_resultat['label_pred'] = preds_binaires
+    df_resultat['label_vrai'] = df_resultat['nb_errors'].apply(lambda x: 1 if x > 0 else 0)
+    
+    # Insertion des labels multi-classes extraits dynamiquement
+    df_resultat['error_types_pred'] = preds_labels
+    
+    # Standardisation de la vérité terrain :
+    # Le modèle ne sachant pas distinguer "sous" ou "sur" dosage (juste une anomalie de nombre),
+    # on regroupe ces labels sous l'étiquette unique "dosage" pour que l'évaluation soit juste.
+    if 'error_types' in df_resultat.columns:
+        df_resultat['error_types'] = df_resultat['error_types'].astype(str)
+        df_resultat['error_types'] = df_resultat['error_types'].str.replace('sous_dosage', 'dosage')
+        df_resultat['error_types'] = df_resultat['error_types'].str.replace('sur_dosage', 'dosage')
+        
+        # Homogénéisation des noms générés ("unit" vs "unit_dosage")
+        # Remplace strictement "unit" (si isolé ou avec séparateur) par "unit_dosage"
+        import re
+        df_resultat['error_types'] = df_resultat['error_types'].apply(
+            lambda x: re.sub(r'\bunit\b', 'unit_dosage', x)
+        )
+
+    return df_resultat
+
     """Orchestre le retrait des labels, la prédiction, et la reconstruction du DataFrame."""
     colonnes_labels = ['error_types', 'nb_errors']
     
