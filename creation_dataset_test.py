@@ -22,14 +22,16 @@ def perturb_route_unit(texte,list_text):
     if not candidates:
         return texte 
     return random.choice(candidates)
-def perturb_numeric(row, dosage_type, map_lower, map_upper):
+def perturb_numeric(row, dosage_type, perturb_mean, mean, std):
     drug_name = str(row['drug'])
     if dosage_type == 'sous_dosage':
-        return map_lower.get(drug_name, row['dose_val_rx']) 
+        perturb_lower = mean.get(drug_name, row['dose_val_rx']) - std.get(drug_name, row['dose_val_rx']) *  perturb_mean
+        return perturb_lower
     else:
-        return map_upper.get(drug_name, row['dose_val_rx'])
+        perturb_upper = std.get(drug_name, row['dose_val_rx']) + std.get(drug_name, row['dose_val_rx']) *  perturb_mean
+        return perturb_upper
 
-def generate_test_dataset_simple(df_input, number_prescription, map_lower, map_upper):
+def generate_test_dataset_simple(df_input, number_prescription, perturb_value, mean, std):
  
     # Échantillonnage
     df_drug = df_input.sample(n=number_prescription).reset_index(drop=True).copy()
@@ -42,8 +44,6 @@ def generate_test_dataset_simple(df_input, number_prescription, map_lower, map_u
     split_num = number_prescription // 5
     list_routes = df_input['route'].dropna().unique().tolist()
     list_units = df_input['dose_unit_rx'].dropna().unique().tolist()
-
-    # --- Application des erreurs par tranches (exclusivité des index) ---
     
     # 1. Route
     start, end = 0, split_num
@@ -60,20 +60,20 @@ def generate_test_dataset_simple(df_input, number_prescription, map_lower, map_u
     df_drug.loc[start:end, 'dose_unit_rx'] = df_drug.loc[start:end, 'dose_unit_rx'].apply(lambda x: perturb_route_unit(x, list_units))
     df_drug.loc[start:end, ['nb_errors', 'error_types']] = [1, "unit_dosage"]
 
-    # 4. Sous-dosage (Utilisation du dictionnaire map_lower)
+    # 4. Sous-dosage 
     start, end = end + 1, 4 * split_num
     df_drug.loc[start:end, 'dose_val_rx'] = df_drug.loc[start:end].apply(
-        lambda r: map_lower.get(str(r['drug']), r['dose_val_rx']), axis=1)
+        lambda r: perturb_numeric(r, 'sous_dosage', perturb_value, mean, std), axis=1)
     df_drug.loc[start:end, ['nb_errors', 'error_types']] = [1, "sous_dosage"]
 
-    # 5. Sur-dosage (Utilisation du dictionnaire map_upper)
+    # 5. Sur-dosage
     start, end = end + 1, number_prescription - 1
     df_drug.loc[start:end, 'dose_val_rx'] = df_drug.loc[start:end].apply(
-        lambda r: map_upper.get(str(r['drug']), r['dose_val_rx']), axis=1)
+        lambda r: perturb_numeric(r, 'sur_dosage', perturb_value, mean, std), axis=1)
     df_drug.loc[start:end, ['nb_errors', 'error_types']] = [1, "sur_dosage"]
 
     return df_drug
-def generate_multi_errors_per_row(df_input, number_prescription, errors_to_generate, map_lower, map_upper):
+def generate_multi_errors_per_row(df_input, number_prescription, errors_to_generate, perturb_value, mean, std):
     """
     errors_to_generate : list, ex ['route', 'drug', 'sur_dosage']
     """
@@ -100,15 +100,15 @@ def generate_multi_errors_per_row(df_input, number_prescription, errors_to_gener
             elif error_type == "unit":
                 corrupted_row['dose_unit_rx'] = perturb_route_unit(row['dose_unit_rx'], list_units)
             elif error_type == "sous_dosage":
-                corrupted_row['dose_val_rx'] = map_lower.get(str(row['drug']), row['dose_val_rx'])
+                corrupted_row['dose_val_rx'] = perturb_numeric(row, 'sous_dosage', perturb_value, mean, std)
             elif error_type == "sur_dosage":
-                corrupted_row['dose_val_rx'] = map_upper.get(str(row['drug']), row['dose_val_rx'])
+                corrupted_row['dose_val_rx'] = perturb_numeric(row, 'sur_dosage', perturb_value, mean, std)
             
             new_rows.append(corrupted_row)
 
     # Conversion de la liste de Series en DataFrame
     return pd.DataFrame(new_rows).reset_index(drop=True)
-def apply_multiple_errors(row, number_perturb, map_lower, map_upper, list_routes, list_units):
+def apply_multiple_errors(row, number_perturb, perturb_value, mean, std, list_routes, list_units):
     # On définit les types d'erreurs possibles
     error_pool = ["route", "drug", "unit", "sous_dosage", "sur_dosage"]
     
@@ -124,14 +124,14 @@ def apply_multiple_errors(row, number_perturb, map_lower, map_upper, list_routes
         elif error == "unit":
             row['dose_unit_rx'] = perturb_route_unit(row['dose_unit_rx'], list_units)
         elif error == "sous_dosage":
-            row['dose_val_rx'] = map_lower.get(str(row['drug']), row['dose_val_rx'])
+            row['dose_val_rx'] = perturb_numeric(row, 'sous_dosage', perturb_value, mean, std)
         elif error == "sur_dosage":
-            row['dose_val_rx'] = map_upper.get(str(row['drug']), row['dose_val_rx'])
+            row['dose_val_rx'] = perturb_numeric(row, 'sur_dosage', perturb_value, mean, std)
     
     row['error_types'] = "|".join(selected_errors)
     row['nb_errors'] = number_perturb
     return row
-def generate_test_dataset_multiple(df_input, number_prescription, number_perturb, map_lower, map_upper):
+def generate_test_dataset_multiple(df_input, number_prescription, number_perturb, perturb_value, mean, std):
     # 1. Préparation
     df_drug = df_input.sample(n=number_prescription).reset_index(drop=True).copy()
     df_drug = df_drug.astype(object)
@@ -145,8 +145,9 @@ def generate_test_dataset_multiple(df_input, number_prescription, number_perturb
         apply_multiple_errors, 
         axis=1, 
         number_perturb=number_perturb,
-        map_lower=map_lower,
-        map_upper=map_upper,
+        perturb_value=perturb_value,
+        mean=mean,
+        std=std,
         list_routes=list_routes,
         list_units=list_units
     )
@@ -162,16 +163,26 @@ def generer_phrase(row):
             #f"[DX] {row['nom_diag']} "
             f"[BIO] {row['nom_bio']}")
 
-def generer_datasets_test(df_final, number_prescription, error_types_to_generate, number_perturb):
+def generer_datasets_test(df_final, number_prescription = 3000, error_types_to_generate = None, number_perturb = 2, perturb_values = [0.2, 0.5, 0.75]):
     stats = df_final.groupby('drug')['dose_val_rx'].agg(['mean', 'std'])
+    mean_dict = stats['mean'].to_dict()
+    std_dict = stats['std'].to_dict()
 
-    map_lower = (stats['mean'] - 2 * stats['std']).to_dict()
-    map_upper = (stats['mean'] + 2 * stats['std']).to_dict()
+    all_validation_test = []
+    all_validation_test_mult = []
     
-    df_validation_test = generate_test_dataset_simple(df_final, number_prescription, map_lower, map_upper)
-    df_validation_test['phrase_clinique'] = df_validation_test.apply(generer_phrase, axis=1)
+    for perturb_value in perturb_values:
+        df_validation_test = generate_test_dataset_simple(df_final, number_prescription, perturb_value, mean_dict, std_dict)
+        df_validation_test['phrase_clinique'] = df_validation_test.apply(generer_phrase, axis=1)
+        df_validation_test['perturb_value'] = perturb_value
+        all_validation_test.append(df_validation_test)
+        df_validation_test['pertub_value'] = perturb_value
 
-    df_validation_test_mult = generate_test_dataset_multiple(df_final, number_prescription, number_perturb, map_lower, map_upper)
-    df_validation_test_mult['phrase_clinique'] = df_validation_test_mult.apply(generer_phrase, axis=1)
+        df_validation_test_mult = generate_test_dataset_multiple(df_final, number_prescription, number_perturb, perturb_value, mean_dict, std_dict)
+        df_validation_test_mult['phrase_clinique'] = df_validation_test_mult.apply(generer_phrase, axis=1)
+        df_validation_test_mult['perturb_value'] = perturb_value
+        all_validation_test_mult.append(df_validation_test_mult)
+        df_validation_test_mult['pertub_value'] = perturb_value
 
-    return df_validation_test, df_validation_test_mult
+    # Concaténation de tout pour éviter d'écraser les résultats à chaque boucle
+    return pd.concat(all_validation_test, ignore_index=True), pd.concat(all_validation_test_mult, ignore_index=True)
