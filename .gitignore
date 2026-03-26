@@ -2,9 +2,7 @@
 *.json
 __pycache__/
 
-# Data and model outputs
 data/
-modeles/
 modeles_sorties/
 temp_data/
 outputs/
