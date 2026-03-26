@@ -7,31 +7,39 @@ from pathlib import Path
 from sklearn.model_selection import train_test_split
 
 def generer_datasets_test(df, test_size, perturb_values, dossier_data):
-    # 1. Split initial
+    """
+    Génère un dataset d'entraînement propre et des datasets de test bruités.
+
+    Args:
+        df (pd.DataFrame): Dataset global après nettoyage initial.
+        test_size (float): Proportion de données allouée au test.
+        perturb_values (list): Liste des niveaux de perturbation à appliquer.
+        dossier_data (str ou Path): Chemin de sauvegarde des données.
+
+    Returns:
+        tuple: Un DataFrame pour l'entraînement (df_train) et un dictionnaire
+        contenant les datasets de test indexés par niveau de perturbation.
+    """
     df_train, df_test = train_test_split(
         df, test_size=test_size, random_state=42, stratify=df['drug']
     )
-    # 2. Préparation des proportions
+
     total_lignes = len(df_test)
     nb_erreurs_total = (int(total_lignes * 0.30) // 2) * 2
     nb_erreurs_par_type = nb_erreurs_total // 2
     nb_propres = total_lignes - nb_erreurs_total
 
-    # Isolation du groupe propre
     df_test_propre = df_test.sample(n=nb_propres, random_state=42).copy()
     df_test_propre['error_types'] = "none"
     df_test_propre['nb_errors'] = 0
     df_source_erreurs = df_test.drop(df_test_propre.index)
 
-    # Création du sous-dossier
     chemin_test = Path(dossier_data) / "data_test"
     chemin_test.mkdir(parents=True, exist_ok=True)
     
     datasets_test_memoire = {}
 
-    # 3. Boucle de génération par niveau de perturbation
     for val in perturb_values:
-        # Appel de votre fonction de perturbation (supposée existante ou renommée)
         df_simples, df_multiples = generer_datasets_test_perturb(
             df_final=df_source_erreurs, 
             number_prescription=nb_erreurs_par_type, 
@@ -39,11 +47,9 @@ def generer_datasets_test(df, test_size, perturb_values, dossier_data):
             number_perturb=2,          
             perturb_dose=val           
         )
-        # Assemblage et mélange
         df_final = pd.concat([df_test_propre, df_simples, df_multiples], ignore_index=True)
         df_final = df_final.sample(frac=1, random_state=42).reset_index(drop=True)
               
-        # Sauvegarde
         nom_fichier = chemin_test / f'df_test_perturb_{str(val).replace(".", "_")}.parquet'
         df_final.to_parquet(nom_fichier, index=False)
         datasets_test_memoire[val] = df_final
@@ -129,28 +135,23 @@ def generate_test_dataset_simple(df_input, number_prescription, map_lower, map_u
     list_routes = df_input['route'].dropna().unique().tolist()
     list_units = df_input['dose_unit_rx'].dropna().unique().tolist()
 
-    # 1. Route
     start, end = 0, split_num
     df_drug.loc[start:end, 'route'] = df_drug.loc[start:end, 'route'].apply(lambda x: perturb_route_unit(x, list_routes))
     df_drug.loc[start:end, ['nb_errors', 'error_types']] = [1, "route"]
 
-    # 2. Drug
     start, end = end + 1, 2 * split_num
     df_drug.loc[start:end, 'drug'] = df_drug.loc[start:end, 'drug'].apply(perturb_drug)
     df_drug.loc[start:end, ['nb_errors', 'error_types']] = [1, "drug"]
 
-    # 3. Unité
     start, end = end + 1, 3 * split_num
     df_drug.loc[start:end, 'dose_unit_rx'] = df_drug.loc[start:end, 'dose_unit_rx'].apply(lambda x: perturb_route_unit(x, list_units))
     df_drug.loc[start:end, ['nb_errors', 'error_types']] = [1, "unit_dosage"]
 
-    # 4. Sous-dosage 
     start, end = end + 1, 4 * split_num
     df_drug.loc[start:end, 'dose_val_rx'] = df_drug.loc[start:end].apply(
         lambda r: map_lower.get(str(r['drug']), r['dose_val_rx']), axis=1)
     df_drug.loc[start:end, ['nb_errors', 'error_types']] = [1, "sous_dosage"]
 
-    # 5. Sur-dosage 
     start, end = end + 1, number_prescription - 1
     df_drug.loc[start:end, 'dose_val_rx'] = df_drug.loc[start:end].apply(
         lambda r: map_upper.get(str(r['drug']), r['dose_val_rx']), axis=1)

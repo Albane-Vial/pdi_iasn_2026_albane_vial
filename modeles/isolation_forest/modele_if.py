@@ -154,6 +154,15 @@ def entrainer_pipeline_if(phrases_train, n_components=50, batch_size=32, model_i
 def sauvegarder_pipeline_if(modele_if, model_pca, model_scaler, chemin_dossier: str):
     """
     Sérialise le pipeline complet (IF, PCA, Scaler) sur le disque.
+
+    Args:
+        modele_if: Modèle Isolation Forest entraîné.
+        model_pca: Modèle PCA entraîné.
+        model_scaler: Modèle Scaler entraîné.
+        chemin_dossier (str): Chemin du dossier cible.
+
+    Returns:
+        None
     """
     chemin = Path(chemin_dossier)
     chemin.mkdir(parents=True, exist_ok=True)
@@ -167,6 +176,12 @@ def sauvegarder_pipeline_if(modele_if, model_pca, model_scaler, chemin_dossier: 
 def charger_pipeline_if(chemin_dossier: str):
     """
     Charge le pipeline complet depuis le disque.
+
+    Args:
+        chemin_dossier (str): Chemin du dossier source.
+
+    Returns:
+        tuple: (modele_if, model_pca, model_scaler)
     """
     chemin = Path(chemin_dossier)
     
@@ -275,6 +290,17 @@ def executer_pipeline_inference_if(df_test, modele_if, model_pca, model_scaler, 
 def analyser_phrase_if(phrase, modele_if, pca_model, scaler_model, tokenizer, bert_model):
     """
     Analyse unitaire d'une phrase pour le débogage ou l'explicabilité manuelle.
+
+    Args:
+        phrase (str): Phrase clinique à analyser.
+        modele_if: Modèle Isolation Forest.
+        pca_model: Modèle PCA.
+        scaler_model: Modèle Scaler.
+        tokenizer: Tokenizer BERT.
+        bert_model: Modèle BERT.
+
+    Returns:
+        list: Liste de dictionnaires contenant l'analyse par mot.
     """
     generateur = iterateur_embeddings_tokens([phrase], batch_size=1, tokenizer=tokenizer, model=bert_model)
     

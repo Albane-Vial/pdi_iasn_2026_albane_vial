@@ -186,7 +186,6 @@ def analyser_hallucinations_autre(df, col_pred='error_types_pred'):
     if df.empty or col_pred not in df.columns:
         return {"Volume_Hallucinations_Autre": 0, "Proportion_Sur_Total_Test (%)": 0.0}
 
-    # Détecte si la sous-chaîne 'autre' fait partie des labels prédits
     masque_autre = df[col_pred].apply(lambda x: 'autre' in str(x).split('|') if pd.notna(x) else False)
     
     volume_autre = masque_autre.sum()
@@ -200,18 +199,35 @@ def analyser_hallucinations_autre(df, col_pred='error_types_pred'):
 def evaluer_pipeline_complet(df):
     """
     Exécute l'intégralité des modules d'évaluation et consolide les résultats.
+
+    Args:
+        df (pd.DataFrame): Le DataFrame contenant les prédictions et vérités.
+
+    Returns:
+        dict: Dictionnaire consolidé contenant toutes les métriques d'évaluation.
     """
     return {
         'Detection_Binaire': evaluer_detection_binaire(df),
         'Caracterisation_Multilabel': evaluer_caracterisation_multilabel(df),
         'Caracterisation_TP_Strict': evaluer_qualite_caracterisation_tp(df),
         'Faiblesses_Analyse': analyser_faiblesses_par_type_erreur(df),
-        'Analyse_Hallucinations': analyser_hallucinations_autre(df) # Ajout du module
+        'Analyse_Hallucinations': analyser_hallucinations_autre(df)
     }
 
 def exporter_resultat(nom_modele, pertub_value, df_predictions, rapport_evaluation, dossier_pred, dossier_eval):
     """
     Centralise, formate et archive les résultats complets de l'expérience sur disque.
+
+    Args:
+        nom_modele (str): Identifiant du modèle.
+        pertub_value (float): Niveau de perturbation évalué.
+        df_predictions (pd.DataFrame): Données avec prédictions.
+        rapport_evaluation (dict): Rapport des métriques généré.
+        dossier_pred (Path ou str): Répertoire de sauvegarde des prédictions.
+        dossier_eval (Path ou str): Répertoire de sauvegarde des évaluations.
+
+    Returns:
+        None
     """
     suffixe = f"{nom_modele}_p{str(pertub_value).replace('.', '_')}"
     chemin_eval = Path(dossier_eval)
@@ -223,7 +239,7 @@ def exporter_resultat(nom_modele, pertub_value, df_predictions, rapport_evaluati
     res_multi = rapport_evaluation['Caracterisation_Multilabel']
     res_tp = rapport_evaluation['Caracterisation_TP_Strict']
     df_faiblesse = rapport_evaluation['Faiblesses_Analyse']
-    res_hallucination = rapport_evaluation['Analyse_Hallucinations'] # Extraction
+    res_hallucination = rapport_evaluation['Analyse_Hallucinations']
 
     contenu = f"=== RAPPORT D'ÉVALUATION : {nom_modele} (Perturbation: {pertub_value}) ===\n\n"
     
@@ -246,7 +262,6 @@ def exporter_resultat(nom_modele, pertub_value, df_predictions, rapport_evaluati
     else:
         contenu += "Aucune donnée de faiblesse disponible.\n\n"
 
-    # Nouvelle section affichée dans le rapport
     contenu += "5. ANALYSE DES HALLUCINATIONS (Erreurs sur contextes cliniques non pertinents)\n"
     contenu += f"Volume de prédictions 'autre' : {res_hallucination['Volume_Hallucinations_Autre']}\n"
     contenu += f"Proportion sur le jeu de test : {res_hallucination['Proportion_Sur_Total_Test (%)']} %\n\n"

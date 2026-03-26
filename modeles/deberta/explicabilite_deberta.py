@@ -11,6 +11,19 @@ from lime.lime_text import LimeTextExplainer
 
 
 def generer_explicabilite_ig_deberta(df_audit: pd.DataFrame, modele, tokenizer, device, chemin_export: str):
+    """
+    Génère l'explicabilité par Integrated Gradients (IG) pour le modèle DeBERTa.
+
+    Args:
+        df_audit (pd.DataFrame): Données d'audit contenant les erreurs de prédiction.
+        modele: Modèle de classification chargé.
+        tokenizer: Tokenizer associé au modèle.
+        device: Périphérique (GPU/CPU).
+        chemin_export (str): Chemin d'exportation Excel.
+
+    Returns:
+        None
+    """
     modele.eval()
     modele.zero_grad()
     
@@ -55,6 +68,19 @@ def generer_explicabilite_ig_deberta(df_audit: pd.DataFrame, modele, tokenizer, 
 
     pd.DataFrame(resultats).to_excel(chemin_export, index=False)
 def generer_explicabilite_shap_deberta(df_audit: pd.DataFrame, modele, tokenizer, device, chemin_export: str):
+    """
+    Génère l'explicabilité par SHAP pour le modèle DeBERTa.
+
+    Args:
+        df_audit (pd.DataFrame): Données d'audit contenant les erreurs de prédiction.
+        modele: Modèle de classification chargé.
+        tokenizer: Tokenizer associé au modèle.
+        device: Périphérique (GPU/CPU).
+        chemin_export (str): Chemin d'exportation Excel.
+
+    Returns:
+        None
+    """
     modele.eval()
 
     def prediction_pipeline_shap(texts):
@@ -73,7 +99,6 @@ def generer_explicabilite_shap_deberta(df_audit: pd.DataFrame, modele, tokenizer
     masqueur_texte = shap.maskers.Text(tokenizer)
     explainer_shap = shap.Explainer(prediction_pipeline_shap, masqueur_texte)
     
-    # Limitation de l'échantillon à 10 pour la performance
     df_echantillon = df_audit.head(10)
     textes = df_echantillon['phrase_clinique'].astype(str).tolist()
     labels_vrais = df_echantillon['label_vrai'].tolist()
@@ -90,6 +115,19 @@ def generer_explicabilite_shap_deberta(df_audit: pd.DataFrame, modele, tokenizer
     df_shap.to_excel(chemin_export, index=False)
     
 def generer_explicabilite_lime_deberta(df_audit: pd.DataFrame, modele, tokenizer, device, chemin_export: str):
+    """
+    Génère l'explicabilité par LIME pour le modèle DeBERTa.
+
+    Args:
+        df_audit (pd.DataFrame): Données d'audit contenant les erreurs de prédiction.
+        modele: Modèle de classification chargé.
+        tokenizer: Tokenizer associé au modèle.
+        device: Périphérique (GPU/CPU).
+        chemin_export (str): Chemin d'exportation Excel (les rapports HTML sont générés dans le même dossier).
+
+    Returns:
+        None
+    """
     modele.eval()
 
     def prediction_probabiliste_lime(text_array):
@@ -118,11 +156,9 @@ def generer_explicabilite_lime_deberta(df_audit: pd.DataFrame, modele, tokenizer
 
         exp = explainer_lime.explain_instance(texte, prediction_probabiliste_lime, num_features=10, num_samples=200)
         
-        # Export HTML
         fichier_html = str(chemin_export).replace(".xlsx", f"_{idx}.html")
         exp.save_to_file(fichier_html)
         
-        # Ajout des données pour l'export Excel
         explications_excel.append({
             "phrase": texte,
             "label_vrai": label_vrai,
@@ -134,6 +170,15 @@ def generer_explicabilite_lime_deberta(df_audit: pd.DataFrame, modele, tokenizer
     pd.DataFrame(explications_excel).to_excel(chemin_export, index=False)
 
 def extraire_erreurs_pour_explicabilite(chemin_predictions_parquet: str):
+    """
+    Extrait les faux positifs, faux négatifs et quelques prédictions correctes du résultat de l'inférence.
+
+    Args:
+        chemin_predictions_parquet (str): Chemin du fichier Parquet des prédictions.
+
+    Returns:
+        pd.DataFrame: DataFrame contenant des échantillons pour l'audit XAI.
+    """
     df = pd.read_parquet(chemin_predictions_parquet, engine='pyarrow')
     
     df_erreurs = df[(df['label_vrai'] != df['label_pred']) & (df['nb_errors'] == 1)].copy()    
@@ -154,6 +199,20 @@ def extraire_erreurs_pour_explicabilite(chemin_predictions_parquet: str):
     return pd.concat([exemples_fp, exemples_fn, df_correcte], ignore_index=True)
 
 def executer_audit_organise(df_audit, modele, tokenizer, device, dossier_racine, args):
+    """
+    Orchestre la génération des rapports XAI (IG, SHAP, LIME) en les organisant par sous-dossiers.
+
+    Args:
+        df_audit (pd.DataFrame): DataFrame des prédictions erronées à auditer.
+        modele: Modèle de classification.
+        tokenizer: Tokenizer associé au modèle.
+        device: Périphérique (GPU/CPU).
+        dossier_racine (Path ou str): Répertoire racine des exports XAI.
+        args (argparse.Namespace): Arguments pilotant les méthodes XAI à lancer.
+
+    Returns:
+        None
+    """
     for _, row in df_audit.iterrows():
    
         nature = row['nature_erreur'] 

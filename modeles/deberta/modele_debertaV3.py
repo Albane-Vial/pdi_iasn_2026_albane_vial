@@ -273,6 +273,16 @@ class DatasetInference(TorchDataset):
         return len(self.encodings.input_ids)
 
 def preparer_donnees_test(df_test, colonnes_a_masquer=['error_types', 'nb_errors']):
+    """
+    Sépare les étiquettes de vérité des données pour l'inférence.
+
+    Args:
+        df_test (pd.DataFrame): Dataset contenant toutes les colonnes.
+        colonnes_a_masquer (list): Colonnes à masquer lors de la prédiction.
+
+    Returns:
+        tuple: (DataFrame sans labels, DataFrame contenant uniquement les labels)
+    """
     df_labels_caches = df_test[colonnes_a_masquer].copy()
     df_sans_labels = df_test.drop(columns=colonnes_a_masquer)
     return df_sans_labels, df_labels_caches
@@ -458,6 +468,6 @@ def charger_modele_et_tokenizer(chemin_modele: str, device: torch.device):
     modele = DebertaV2ForTokenClassification.from_pretrained(chemin_modele)
     
     modele.to(device)
-    modele.eval() # Désactivation immédiate du Dropout pour l'XAI
+    modele.eval()
     
     return modele, tokenizer

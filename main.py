@@ -59,6 +59,15 @@ params = {
     'port': '5432'
 }
 def run_preparation_donnees(args):
+    """
+    Exécute la préparation des données (extraction SQL et génération des datasets).
+
+    Args:
+        args (argparse.Namespace): Arguments contenant data_dir, test_size, etc.
+        
+    Returns:
+        None
+    """
     df = None
     chemin_data = Path(args.data_dir)
     chemin_data.mkdir(parents=True, exist_ok=True)
@@ -96,6 +105,15 @@ def run_preparation_donnees(args):
        
 
 def charger_donnees_test(repertoire_base: str) -> dict:     
+    """
+    Charge les datasets de test depuis le disque pour différentes perturbations.
+
+    Args:
+        repertoire_base (str): Répertoire racine contenant le dossier data_test.
+
+    Returns:
+        dict: Dictionnaire {perturbation_value: DataFrame}.
+    """
     base_path = Path(repertoire_base) / "data_test"
     fichiers = {
         0.2: 'df_test_perturb_0_2.parquet',
@@ -116,7 +134,16 @@ def charger_donnees_test(repertoire_base: str) -> dict:
     return datasets
 
 def preparer_arborescence(base_dir: str, nom_modele: str) -> dict:
-    """Crée l'arborescence pour un modèle spécifique et retourne les chemins."""
+    """
+    Crée l'arborescence de sortie pour un modèle spécifique.
+
+    Args:
+        base_dir (str): Répertoire de sortie principal.
+        nom_modele (str): Nom du modèle pour sous-dossier.
+
+    Returns:
+        dict: Chemins des dossiers 'model', 'predictions' et 'evaluations'.
+    """
     base_path = Path(base_dir) / nom_modele
     dossiers = {
         "model": base_path / "model_files",
@@ -124,13 +151,21 @@ def preparer_arborescence(base_dir: str, nom_modele: str) -> dict:
         "evaluations": base_path / "evaluations"
     }
     
-    # Création physique des dossiers sur le disque
     for chemin in dossiers.values():
         chemin.mkdir(parents=True, exist_ok=True)
         
     return dossiers
 
 def run_deberta(args):
+    """
+    Gère le cycle de vie complet du modèle DeBERTaV3 (entraînement, inférence, explicabilité).
+
+    Args:
+        args (argparse.Namespace): Arguments de configuration du modèle.
+
+    Returns:
+        None
+    """
     logger.info("Démarrage du pipeline DeBERTaV3")
     
     chemins = preparer_arborescence(args.output_dir, "deberta")
@@ -200,6 +235,15 @@ def run_deberta(args):
             
             torch.cuda.empty_cache()
 def run_lof(args):
+    """
+    Gère le cycle de vie complet du modèle LOF (entraînement, inférence).
+
+    Args:
+        args (argparse.Namespace): Arguments de configuration du modèle.
+        
+    Returns:
+        None
+    """
     logger.info("Démarrage du pipeline LOF")
     chemins = preparer_arborescence(args.output_dir, "lof")
 
@@ -255,6 +299,15 @@ def run_lof(args):
                 dossier_eval=chemins["evaluations"]
             )
 def run_if(args):
+    """
+    Gère le cycle de vie complet du modèle Isolation Forest (entraînement, inférence, explicabilité).
+
+    Args:
+        args (argparse.Namespace): Arguments de configuration du modèle.
+        
+    Returns:
+        None
+    """
     logger.info("Démarrage du pipeline Isolation Forest (IF)")
     chemins = preparer_arborescence(args.output_dir, "if")
 
@@ -388,6 +441,15 @@ def run_if(args):
             torch.cuda.empty_cache()
     
 def main():
+    """
+    Point d'entrée CLI pour orchestrer l'ensemble du pipeline.
+
+    Args:
+        Aucun (géré via argparse).
+        
+    Returns:
+        None
+    """
     parser = argparse.ArgumentParser(description="Pipeline d'entraînement et d'évaluation.")
     
     # Arguments de données
