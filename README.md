@@ -9,6 +9,14 @@ Ce projet implémente un pipeline complet de traitement de données et d'entraî
 * **Explicabilité** : Génération de rapports d'audit sur les erreurs de prédiction.
 ---
 
+> **⚠️ Avertissement sur l'état des modèles**  
+> - **LOF (Local Outlier Factor)** : Le modèle ne fonctionne pas actuellement en raison d'un problème d'espace/mémoire insuffisant lors du traitement.  
+> - **Isolation Forest (IF)** : Le modèle s'exécute mais ses capacités de détection sont défaillantes (il n'arrive pas à détecter correctement les anomalies). Les résultats d'évaluation de ce modèle reflètent cette limitation.  
+> 
+> L'utilisation du modèle **DeBERTaV3** est actuellement privilégiée.
+
+---
+
 ## Installation
 
 1. **Cloner le répertoire** :
@@ -91,10 +99,10 @@ Le projet suit une architecture modulaire, divisée en scripts de préparation d
 │   ├── deberta/              # Modèle Transformer DeBERTaV3 (NLP)
 │   │   ├── modele_debertaV3.py      # Entraînement et inférence
 │   │   └── explicabilite_deberta.py # Explicabilité (SHAP, LIME, IG)
-│   ├── isolation_forest/     # Modèle classique (Isolation Forest) avec embeddings BERT
+│   ├── isolation_forest/     # Modèle classique (Isolation Forest) - ⚠️ Détection défaillante
 │   │   ├── modele_if.py             # Entraînement et inférence
 │   │   └── explicabilite_if.py      # Explicabilité (SHAP, LIME)
-│   └── lof/                  # Modèle classique (Local Outlier Factor) avec embeddings BERT
+│   └── lof/                  # Modèle classique (Local Outlier Factor) - ⚠️ Problème d'espace/mémoire
 │       └── modele_lof.py            # Entraînement, inférence et réduction PCA
 └── modeles_sorties/          # (Créé à l'exécution) Sauvegarde des poids, prédictions et rapports d'évaluation
 ```
