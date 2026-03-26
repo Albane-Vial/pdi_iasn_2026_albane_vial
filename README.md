@@ -21,8 +21,7 @@ Ce projet implémente un pipeline complet de traitement de données et d'entraî
 
 1. **Cloner le répertoire** :
    ```bash
-   git clone https://github.com/votre-repo/mimic_albanevial.git
-   cd mimic_albanevial
+   git clone https://github.com/Albane-Vial/pdi_iasn_2026_albane_vial.git
    ```
 
 2. **Installer les dépendances** :
