@@ -1,5 +1,3 @@
-# mimic_albanevial
-
 #  Pipeline de Détection d'Anomalies Médicales (MIMIC-IV)
 
 Ce projet implémente un pipeline complet de traitement de données et d'entraînement de modèles (DeBERTaV3 et LOF) pour la détection d'erreurs de prescription dans la base de données MIMIC-IV.
@@ -11,7 +9,7 @@ Ce projet implémente un pipeline complet de traitement de données et d'entraî
 * **Explicabilité** : Génération de rapports d'audit sur les erreurs de prédiction.
 ---
 
-## 🛠 Installation
+## Installation
 
 1. **Cloner le répertoire** :
    ```bash
