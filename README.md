@@ -106,19 +106,3 @@ Le projet suit une architecture modulaire, divisée en scripts de préparation d
 4. **Évaluation & Audit** : Comparaison des prédictions aux anomalies injectées, génération de métriques et utilisation de XAI (LIME, SHAP, etc.) pour expliquer les décisions du modèle lorsqu'il se trompe.
 
 ---
-
-## ⚙️ Paramètres avancés
-
-| Argument | Type | Défaut | Description |
-| :--- | :--- | :--- | :--- |
-| `--perturb_dose` | float | `0.3` | Écart-type pour les erreurs de dose. |
-| `--error_ratio` | float | `0.30` | % d'anomalies dans le set de test. |
-| `--output_dir` | str | `modeles_sorties` | Dossier de sauvegarde des modèles. |
-
----
-
-## ✉️ Contact
-**Auteur** : Albane Vial  
-**Projet** : Analyse de risque de prescription - MIMIC-IV
-
----
