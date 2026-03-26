@@ -1,5 +1,3 @@
-# mimic_albanevial
-
 #  Pipeline de Détection d'Anomalies Médicales (MIMIC-IV)
 
 Ce projet implémente un pipeline complet de traitement de données et d'entraînement de modèles (DeBERTaV3 et LOF) pour la détection d'erreurs de prescription dans la base de données MIMIC-IV.
@@ -11,7 +9,7 @@ Ce projet implémente un pipeline complet de traitement de données et d'entraî
 * **Explicabilité** : Génération de rapports d'audit sur les erreurs de prédiction.
 ---
 
-## 🛠 Installation
+## Installation
 
 1. **Cloner le répertoire** :
    ```bash
@@ -77,17 +75,35 @@ python main.py --model deberta --explain
 
 ## Architecture du Projet
 
+Le projet suit une architecture modulaire, divisée en scripts de préparation de données et en modules spécifiques pour chaque algorithme d'apprentissage.
+
 ```text
 .
-├── main.py                 # Point d'entrée principal (CLI)
-├── creation_dataset_test.py # Logique de split et perturbation
-├── nettoyage_donnees.py     # Fonctions de nettoyage et NLP
-├── data/                    # Stockage des fichiers .parquet
-│   └── data_test/           # Datasets de test (p0_2, p0_5, etc.)
-└── modeles/                 # Sorties (Poids du modèle, Logs, Eval)
-    ├── deberta/
-    └── lof/
+├── main.py                   # Point d'entrée principal (CLI). Orchestre l'extraction, la génération, l'entraînement, l'inférence et l'explicabilité pour les modèles.
+├── nettoyage_donnees.py      # Pipeline d'extraction PostgreSQL, filtrage, jointure (patients, admissions, biologie, prescriptions) et construction de la `phrase_clinique`.
+├── creation_dataset_test.py  # Logique de split et d'injection de perturbations (erreurs unitaires et multiples sur les voies, molécules, unités, sous-dosages, sur-dosages).
+├── explore_mimic.py          # Script d'exploration de l'API Kaggle pour lister les fichiers et schémas MIMIC-IV sans tout télécharger.
+├── data/                     # Stockage des fichiers de données (.parquet)
+│   ├── df_train.parquet      # Dataset d'entraînement sain
+│   └── data_test/            # Datasets de test incluant des anomalies à différents niveaux de perturbation (0.2, 0.5, 1, 2)
+├── modeles/                  # Implémentations des modèles ML/DL
+│   ├── evaluation_modele.py  # Fonctions d'évaluation globale (métriques de classification et rapports)
+│   ├── deberta/              # Modèle Transformer DeBERTaV3 (NLP)
+│   │   ├── modele_debertaV3.py      # Entraînement et inférence
+│   │   └── explicabilite_deberta.py # Explicabilité (SHAP, LIME, IG)
+│   ├── isolation_forest/     # Modèle classique (Isolation Forest) avec embeddings BERT
+│   │   ├── modele_if.py             # Entraînement et inférence
+│   │   └── explicabilite_if.py      # Explicabilité (SHAP, LIME)
+│   └── lof/                  # Modèle classique (Local Outlier Factor) avec embeddings BERT
+│       └── modele_lof.py            # Entraînement, inférence et réduction PCA
+└── modeles_sorties/          # (Créé à l'exécution) Sauvegarde des poids, prédictions et rapports d'évaluation
 ```
+
+### Flux d'Exécution (Data Flow)
+1. **Extraction & Nettoyage** (`nettoyage_donnees.py`) : Connexion à PostgreSQL, extraction conditionnelle et formatage des variables structurées en une phrase textuelle (via des balises comme `[DRUG]`, `[DOSE]`, `[ROUTE]`, etc.).
+2. **Génération d'Anomalies** (`creation_dataset_test.py`) : Sur la base de données saines, création de fichiers de tests bruités (erreurs simulées de prescriptions : typographie, mauvaise unité, erreurs de dosage).
+3. **Apprentissage & Inférence** (`main.py` -> `modeles/`) : Les modèles (DeBERTa, LOF, ou Isolation Forest) apprennent la représentation de prescriptions "normales" pour détecter celles qui sont aberrantes.
+4. **Évaluation & Audit** : Comparaison des prédictions aux anomalies injectées, génération de métriques et utilisation de XAI (LIME, SHAP, etc.) pour expliquer les décisions du modèle lorsqu'il se trompe.
 
 ---
 
